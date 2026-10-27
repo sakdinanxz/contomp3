@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>แปลงวิดีโอเป็นเสียง</title>
+<meta name="description" content="แปลงไฟล์วิดีโอเป็นไฟล์เสียง MP3 หรือ WAV ในเบราว์เซอร์ ไม่ต้องอัปโหลดไฟล์ขึ้นเซิร์ฟเวอร์">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f5f1;
+    --card: #ffffff;
+    --text: #1d1d1b;
+    --muted: #6b6a65;
+    --line: #e2e0d8;
+    --accent: #e4572e;
+    --accent-ink: #ffffff;
+    --soft: #fbeee9;
+    --ok: #2e8b57;
+    --err: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413;
+      --card: #1e1e1c;
+      --text: #f1f0eb;
+      --muted: #a09e96;
+      --line: #33322e;
+      --accent: #ff6b42;
+      --accent-ink: #141413;
+      --soft: #2b1d18;
+      --ok: #5cc48a;
+      --err: #ff7a6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "IBM Plex Sans Thai", system-ui, sans-serif;
+    line-height: 1.6;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 48px 16px 64px; }
+  h1 { font-size: 2rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 28px; }
+
+  .drop {
+    display: block;
+    border: 2px dashed var(--line);
+    border-radius: 16px;
+    background: var(--card);
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--soft); }
+  .drop input { display: none; }
+  .drop .big { font-size: 1.1rem; font-weight: 600; }
+  .drop .small { color: var(--muted); font-size: .9rem; }
+  .icon { width: 44px; height: 44px; margin: 0 auto 10px; color: var(--accent); }
+
+  .fileinfo {
+    display: none;
+    margin-top: 14px;
+    padding: 12px 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    word-break: break-all;
+  }
+  .fileinfo b { font-weight: 600; }
+  .fileinfo span { color: var(--muted); }
+
+  .options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px;
+    margin: 20px 0;
+  }
+  label.opt { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
+  select {
+    font: inherit;
+    font-size: .95rem;
+    color: var(--text);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 10px;
+  }
+
+  button {
+    font: inherit;
+    font-weight: 600;
+    width: 100%;
+    padding: 14px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 1.05rem;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  .progress { display: none; margin-top: 18px; }
+  .bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .status { font-size: .9rem; color: var(--muted); margin-top: 6px; }
+  .status.err { color: var(--err); }
+
+  .result {
+    display: none;
+    margin-top: 22px;
+    padding: 18px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+  }
+  .result audio { width: 100%; margin: 8px 0 12px; }
+  .result a.dl {
+    display: block;
+    text-align: center;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--ok);
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  footer { margin-top: 40px; color: var(--muted); font-size: .85rem; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>แปลงวิดีโอเป็นเสียง</h1>
+  <p class="sub">ดึงเสียงจากไฟล์วิดีโอออกมาเป็น MP3 หรือ WAV — ทำงานในเครื่องคุณทั้งหมด ไฟล์ไม่ถูกอัปโหลดไปไหน</p>
+
+  <label class="drop" id="drop">
+    <input type="file" id="file" accept="video/*,audio/*">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+    <div class="big">ลากไฟล์วิดีโอมาวางที่นี่</div>
+    <div class="small">หรือคลิกเพื่อเลือกไฟล์ (MP4, WebM, MOV, MKV ฯลฯ)</div>
+  </label>
+  <div class="fileinfo" id="fileinfo"></div>
+
+  <div class="options">
+    <label class="opt">รูปแบบไฟล์
+      <select id="format">
+        <option value="mp3">MP3</option>
+        <option value="wav">WAV</option>
+      </select>
+    </label>
+    <label class="opt">คุณภาพ (MP3)
+      <select id="bitrate">
+        <option value="96">96 kbps</option>
+        <option value="128">128 kbps</option>
+        <option value="192" selected>192 kbps</option>
+        <option value="256">256 kbps</option>
+        <option value="320">320 kbps</option>
+      </select>
+    </label>
+    <label class="opt">Sample rate
+      <select id="rate">
+        <option value="22050">22.05 kHz</option>
+        <option value="44100" selected>44.1 kHz</option>
+        <option value="48000">48 kHz</option>
+      </select>
+    </label>
+    <label class="opt">ช่องเสียง
+      <select id="channels">
+        <option value="2">สเตอริโอ</option>
+        <option value="1">โมโน</option>
+      </select>
+    </label>
+  </div>
+
+  <button id="convert" disabled>แปลงไฟล์</button>
+
+  <div class="progress" id="progress">
+    <div class="bar"><div id="barfill"></div></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="result" id="result">
+    <b>เสร็จแล้ว</b>
+    <audio id="player" controls></audio>
+    <a class="dl" id="download" href="#">ดาวน์โหลดไฟล์เสียง</a>
+  </div>
+
+  <footer>ใช้ Web Audio API + lamejs · ไฟล์ใหญ่มากอาจใช้หน่วยความจำเยอะ</footer>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let currentFile = null;
+let outUrl = null;
+
+const drop = $('#drop');
+const fileInput = $('#file');
+const convertBtn = $('#convert');
+
+function formatSize(bytes) {
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+function formatTime(sec) {
+  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+function setFile(f) {
+  if (!f) return;
+  currentFile = f;
+  const info = $('#fileinfo');
+  info.style.display = 'block';
+  info.innerHTML = '';
+  const b = document.createElement('b'); b.textContent = f.name;
+  const sp = document.createElement('span'); sp.textContent = ' · ' + formatSize(f.size);
+  info.append(b, sp);
+  convertBtn.disabled = false;
+  $('#result').style.display = 'none';
+  $('#progress').style.display = 'none';
+}
+
+fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', (e) => setFile(e.dataTransfer.files[0]));
+
+$('#format').addEventListener('change', () => {
+  $('#bitrate').disabled = $('#format').value !== 'mp3';
+});
+
+function setStatus(text, pct, isErr) {
+  $('#progress').style.display = 'block';
+  const st = $('#status');
+  st.textContent = text;
+  st.classList.toggle('err', !!isErr);
+  if (pct != null) $('#barfill').style.width = pct + '%';
+}
+
+const tick = () => new Promise(r => setTimeout(r, 0));
+
+function floatTo16(f32) {
+  const out = new Int16Array(f32.length);
+  for (let i = 0; i < f32.length; i++) {
+    const s = Math.max(-1, Math.min(1, f32[i]));
+    out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return out;
+}
+
+function encodeWav(ab) {
+  const ch = ab.numberOfChannels, rate = ab.sampleRate, len = ab.length;
+  const dataSize = len * ch * 2;
+  const buf = new ArrayBuffer(44 + dataSize);
+  const v = new DataView(buf);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + dataSize, true); w(8, 'WAVE');
+  w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+  v.setUint16(22, ch, true); v.setUint32(24, rate, true);
+  v.setUint32(28, rate * ch * 2, true); v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true);
+  w(36, 'data'); v.setUint32(40, dataSize, true);
+  const chans = [];
+  for (let c = 0; c < ch; c++) chans.push(ab.getChannelData(c));
+  let o = 44;
+  for (let i = 0; i < len; i++) {
+    for (let c = 0; c < ch; c++) {
+      const s = Math.max(-1, Math.min(1, chans[c][i]));
+      v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      o += 2;
+    }
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+async function encodeMp3(ab, kbps, onProgress) {
+  if (typeof lamejs === 'undefined') throw new Error('โหลดตัวเข้ารหัส MP3 ไม่สำเร็จ (ตรวจสอบอินเทอร์เน็ต) ลองเลือก WAV แทน');
+  const ch = ab.numberOfChannels;
+  const enc = new lamejs.Mp3Encoder(ch, ab.sampleRate, kbps);
+  const left = floatTo16(ab.getChannelData(0));
+  const right = ch > 1 ? floatTo16(ab.getChannelData(1)) : null;
+  const block = 1152 * 20;
+  const parts = [];
+  let n = 0;
+  for (let i = 0; i < left.length; i += block) {
+    const l = left.subarray(i, i + block);
+    const out = right ? enc.encodeBuffer(l, right.subarray(i, i + block)) : enc.encodeBuffer(l);
+    if (out.length) parts.push(new Uint8Array(out));
+    if (++n % 10 === 0) { onProgress(i / left.length); await tick(); }
+  }
+  const end = enc.flush();
+  if (end.length) parts.push(new Uint8Array(end));
+  return new Blob(parts, { type: 'audio/mpeg' });
+}
+
+async function convert() {
+  if (!currentFile) return;
+  convertBtn.disabled = true;
+  $('#result').style.display = 'none';
+  try {
+    setStatus('กำลังอ่านไฟล์…', 5);
+    const data = await currentFile.arrayBuffer();
+
+    setStatus('กำลังถอดเสียงจากวิดีโอ…', 15);
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC();
+    let decoded;
+    try {
+      decoded = await ctx.decodeAudioData(data);
+    } catch (e) {
+      throw new Error('อ่านเสียงจากไฟล์นี้ไม่ได้ — ไฟล์อาจไม่มีเสียง หรือเบราว์เซอร์ไม่รองรับ codec นี้ (ลองใช้ Chrome)');
+    } finally {
+      ctx.close && ctx.close();
+    }
+
+    const rate = parseInt($('#rate').value, 10);
+    const channels = $('#channels').value === '1' ? 1 : Math.min(2, decoded.numberOfChannels);
+    setStatus('กำลังปรับ sample rate / ช่องเสียง…', 35);
+    const off = new OfflineAudioContext(channels, Math.max(1, Math.ceil(decoded.duration * rate)), rate);
+    const src = off.createBufferSource();
+    src.buffer = decoded;
+    src.connect(off.destination);
+    src.start();
+    const rendered = await off.startRendering();
+
+    const fmt = $('#format').value;
+    let blob;
+    if (fmt === 'mp3') {
+      const kbps = parseInt($('#bitrate').value, 10);
+      blob = await encodeMp3(rendered, kbps, (p) =>
+        setStatus('กำลังเข้ารหัส MP3… ' + Math.round(p * 100) + '%', 45 + p * 50));
+    } else {
+      setStatus('กำลังสร้างไฟล์ WAV…', 70);
+      await tick();
+      blob = encodeWav(rendered);
+    }
+
+    if (outUrl) URL.revokeObjectURL(outUrl);
+    outUrl = URL.createObjectURL(blob);
+    const base = currentFile.name.replace(/\.[^.]+$/, '');
+    const name = base + '.' + fmt;
+    $('#player').src = outUrl;
+    const dl = $('#download');
+    dl.href = outUrl;
+    dl.download = name;
+    dl.textContent = 'ดาวน์โหลด ' + name + ' (' + formatSize(blob.size) + ')';
+    $('#result').style.display = 'block';
+    setStatus('เสร็จแล้ว · ความยาว ' + formatTime(rendered.duration), 100);
+  } catch (e) {
+    console.error(e);
+    setStatus(e.message || 'เกิดข้อผิดพลาด', 0, true);
+  } finally {
+    convertBtn.disabled = false;
+  }
+}
+
+convertBtn.addEventListener('click', convert);
+</script>
+</body>
+</html>
